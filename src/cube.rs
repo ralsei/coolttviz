@@ -123,7 +123,6 @@ impl Cube {
                     for loc in 0..2_u32.pow(dim - 2) {
                         let mut v = point(insert_bit(insert_bit(loc, d0), d1), dim, size);
                         let dims = dims_from_point(dim_names, &v, d0, d1);
-                        println!("{:?}", dims);
 
                         v[d0 as usize] = -size;
                         v[d1 as usize] = -size;
@@ -216,6 +215,7 @@ impl Cube {
         self.face_vbo.write(&face_geometry);
         let draw_params = DrawParameters {
             blend: Blend::alpha_blending(),
+            line_width: Some(4_f32),
             ..Default::default()
         };
         target.draw(&self.face_vbo, index::NoIndices(index::PrimitiveType::TrianglesList), shader, &uniforms, &draw_params).unwrap();
