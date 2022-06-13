@@ -77,7 +77,7 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
     };
 
     let ctx = unsafe { ImStr::from_utf8_with_nul_unchecked(scene.context.as_bytes()) };
-    Window::new(im_str!("Context"))
+    Window::new("Context")
         .size([200.0, 200.0], Condition::Appearing)
         .build(ui, || {
             ui.text_wrapped(ctx)

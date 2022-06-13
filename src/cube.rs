@@ -87,49 +87,68 @@ impl Cube {
 
         // FIXME: Preallocate with the correct capacity.
         let mut faces = Vec::new();
-        // To build a 2-face for an n-cube, we will need to
-        // pick 2 dimensions that will vary to form all the corners
-        // of the square.
-        for d0 in 0..dim {
-            for d1 in d0+1..dim {
-                // Now that we know what 2 dimensions will vary, we need
-                // to pick where on the cube this 2-face will live.
+        // HACK: This could probably work without the branch
+        if dim == 1 {
+            // If we only have one dimension, the below algorithm is moot, and leads to no draw.
+            // We pick the only dimension to vary, and then draw a degenerate face.
+            let mut v = point(0, dim, size);
 
-                // For instance, on a 3-cube, if we vary the 'x' and 'y' dimensions, we need to create
-                // faces when 'z' is 0 AND 1. To generalize to higher dimensions, we need
-                // to generate all possible places where the face can live by looking
-                // at all the dimensions that do not vary during face construction.
-                //
-                // To do this cheaply and easily, we will use some bit level-magic by
-                // realizing that an integer 'c < 2 ^ n' can represent a vertex on an
-                // n-cube by manner of it's binary representation.
-                for loc in 0..2_u32.pow(dim - 2) {
-                    let mut v = point(insert_bit(insert_bit(loc, d0), d1), dim, size);
-                    let dims = dims_from_point(dim_names, &v, d0, d1);
+            v[0] = -size;
+            let left = linalg::project(&v);
 
-                    v[d0 as usize] = -size;
-                    v[d1 as usize] = -size;
-                    let bottom_left = linalg::project(&v);
+            v[0] = size;
+            let right = linalg::project(&v);
 
-                    v[d0 as usize] = size;
-                    v[d1 as usize] = -size;
-                    let bottom_right = linalg::project(&v);
+            let points = [ left, left, right, right ];
+            let normal = Vector3::zeros();
 
-                    v[d0 as usize] = -size;
-                    v[d1 as usize] = size;
-                    let top_left = linalg::project(&v);
+            faces.push(Face { points, normal, dims: vec![] })
+        } else {
+            // To build a 2-face for an n-cube, we will need to
+            // pick 2 dimensions that will vary to form all the corners
+            // of the square.
+            for d0 in 0..dim {
+                for d1 in d0+1..dim {
+                    // Now that we know what 2 dimensions will vary, we need
+                    // to pick where on the cube this 2-face will live.
 
-                    v[d0 as usize] = size;
-                    v[d1 as usize] = size;
-                    let top_right = linalg::project(&v);
+                    // For instance, on a 3-cube, if we vary the 'x' and 'y' dimensions, we need to create
+                    // faces when 'z' is 0 AND 1. To generalize to higher dimensions, we need
+                    // to generate all possible places where the face can live by looking
+                    // at all the dimensions that do not vary during face construction.
+                    //
+                    // To do this cheaply and easily, we will use some bit level-magic by
+                    // realizing that an integer 'c < 2 ^ n' can represent a vertex on an
+                    // n-cube by manner of it's binary representation.
+                    for loc in 0..2_u32.pow(dim - 2) {
+                        let mut v = point(insert_bit(insert_bit(loc, d0), d1), dim, size);
+                        let dims = dims_from_point(dim_names, &v, d0, d1);
+                        println!("{:?}", dims);
 
-                    let points = [ bottom_left, bottom_right, top_left, top_right ];
+                        v[d0 as usize] = -size;
+                        v[d1 as usize] = -size;
+                        let bottom_left = linalg::project(&v);
 
-                    let horiz = bottom_right - bottom_left;
-                    let vert = top_left - bottom_left;
-                    let normal = horiz.cross(&vert);
+                        v[d0 as usize] = size;
+                        v[d1 as usize] = -size;
+                        let bottom_right = linalg::project(&v);
 
-                    faces.push(Face { points, normal, dims })
+                        v[d0 as usize] = -size;
+                        v[d1 as usize] = size;
+                        let top_left = linalg::project(&v);
+
+                        v[d0 as usize] = size;
+                        v[d1 as usize] = size;
+                        let top_right = linalg::project(&v);
+
+                        let points = [ bottom_left, bottom_right, top_left, top_right ];
+
+                        let horiz = bottom_right - bottom_left;
+                        let vert = top_left - bottom_left;
+                        let normal = horiz.cross(&vert);
+
+                        faces.push(Face { points, normal, dims })
+                    }
                 }
             }
         }
