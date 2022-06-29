@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use nalgebra::{Isometry3, Vector3, Point3};
+use nalgebra::{Isometry3, Point3, Vector3};
 
 // TODO: It might be a good idea to cache the eye and view?
 pub struct Camera {
@@ -28,10 +28,10 @@ impl Camera {
     pub fn rotate_polar(&mut self, delta: f32) {
         self.polar += delta;
 
-        if self.polar < - PI/2.0 {
-            self.polar = -PI/2.0;
-        } else if self.polar > PI/2.0 {
-            self.polar = PI/2.0;
+        if self.polar < -PI / 2.0 {
+            self.polar = -PI / 2.0;
+        } else if self.polar > PI / 2.0 {
+            self.polar = PI / 2.0;
         }
     }
 
@@ -46,13 +46,13 @@ impl Camera {
         Point3::new(
             self.radius * self.polar.cos() * self.azimuth.cos(),
             self.radius * self.polar.sin(),
-            self.radius * self.polar.cos() * self.azimuth.sin()
+            self.radius * self.polar.cos() * self.azimuth.sin(),
         )
     }
 
     pub fn view(&self) -> Isometry3<f32> {
-        let origin : Point3<f32> = Point3::new(0.0, 0.0, 0.0);
-        let up : Vector3<f32> = Vector3::new(0.0, 1.0, 0.0);
+        let origin: Point3<f32> = Point3::new(0.0, 0.0, 0.0);
+        let up: Vector3<f32> = Vector3::new(0.0, 1.0, 0.0);
         Isometry3::look_at_rh(&self.eye(), &origin, &up)
     }
 }

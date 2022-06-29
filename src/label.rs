@@ -1,13 +1,12 @@
 use imgui::*;
-
-use nalgebra::{Point3, Vector3, Vector4, Matrix4};
+use nalgebra::Matrix4;
 
 use crate::linalg;
 use crate::messages;
 
 pub struct Label {
     pub position: Vec<f32>,
-    pub txt: String
+    pub txt: String,
 }
 
 impl Label {
@@ -16,12 +15,12 @@ impl Label {
         for dim in dims {
             match lbl.position.get(dim) {
                 Some(pos) => position.push(*pos),
-                None => position.push(0.0)
+                None => position.push(0.0),
             }
         }
         Label {
             position,
-            txt: lbl.txt.clone()
+            txt: lbl.txt.clone(),
         }
     }
 }
@@ -32,12 +31,11 @@ impl Label {
         let window_pos = linalg::window_coords(mvp, ui.io().display_size, projected);
 
         // We want to truncate the label titles here, as they can get absolutely massive.
-        let title =
-            if self.txt.len() > 10 {
-                format!("{}...##{}\0", self.txt[0..9 - 3].to_owned(), self.txt)
-            } else {
-                format!("{}##{}\0", self.txt, self.txt)
-            };
+        let title = if self.txt.len() > 10 {
+            format!("{}...##{}\0", self.txt[0..9 - 3].to_owned(), self.txt)
+        } else {
+            format!("{}##{}\0", self.txt, self.txt)
+        };
 
         let title_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(title.as_bytes()) };
         Window::new(title_imstr)

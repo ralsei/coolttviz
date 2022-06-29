@@ -1,11 +1,11 @@
-mod linalg;
+mod camera;
 mod cube;
 mod label;
-mod render;
-mod system;
+mod linalg;
 mod messages;
+mod render;
 mod server;
-mod camera;
+mod system;
 mod vertex;
 
 fn main() {
