@@ -208,13 +208,17 @@ impl Cube {
             model: model_unif,
             view_projection: view_proj_unif
         };
+        let draw_params = DrawParameters {
+            line_width: Some(4_f32),
+            ..Default::default()
+        };
         target
             .draw(
                 &self.vbo,
                 index::NoIndices(index::PrimitiveType::LinesList),
                 shader,
                 &uniforms,
-                &Default::default(),
+                &draw_params,
             )
             .unwrap();
     }
@@ -258,5 +262,20 @@ impl Cube {
                 &draw_params,
             )
             .unwrap();
+    }
+
+    pub fn render_all<S: Surface>(
+        &mut self,
+        view_proj: Matrix4<f32>,
+        shader: &Program,
+        target: &mut S,
+    ) {
+        self.render(view_proj, shader, target);
+
+        // [NOTE: Hazel; 2022-06-29] We clone here to avoid borrowing self twice mutably
+        // This should be negligible perf-wise? If not we can revisit it
+        for face in &mut self.faces.clone() {
+            // self.render_face(&face, view_proj, shader, target);
+        }
     }
 }

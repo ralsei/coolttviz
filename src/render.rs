@@ -4,90 +4,29 @@ use glium::texture::DepthTexture2d;
 use glium::uniforms::SamplerBehavior;
 use glium::*;
 use imgui::*;
-use imgui_glium_renderer::Texture;
+use imgui_glium_renderer::{Texture, Renderer};
 use nalgebra::{Perspective3, Unit};
 use std::rc::Rc;
 
 use crate::camera;
+use crate::camera::Camera;
 use crate::cube;
 use crate::label;
 use crate::messages;
 use crate::{linalg, system};
 
 pub struct Scene {
-    pub camera: camera::Camera,
+    camera: camera::Camera,
 
-    pub cube: cube::Cube,
+    cube: cube::Cube,
 
-    pub program: glium::Program,
+    program: glium::Program,
 
-    pub dims: Vec<String>,
-    pub labels: Vec<label::Label>,
-    pub context: String,
-}
+    dims: Vec<String>,
+    labels: Vec<label::Label>,
 
-fn init_scene(display: &Display, msg: &messages::DisplayGoal) -> Scene {
-    let camera = camera::Camera::new();
-
-    let program = program!(display, 140 => {
-        vertex: include_str!("../resources/shader.vert"),
-        fragment: include_str!("../resources/shader.frag")
-    })
-    .unwrap();
-
-    let labels = msg
-        .labels
-        .iter()
-        .map(|lbl| label::Label::new(&msg.dims, lbl))
-        .collect();
-    let cube = cube::Cube::new(display, &msg.dims, 1.0);
-
-    Scene {
-        camera,
-        program,
-        cube,
-        labels,
-        dims: msg.dims.clone(),
-        context: msg.context.clone(),
-    }
-}
-
-fn render_cube<S: Surface>(ui: &Ui, display: &Display, scene: &mut Scene, target: &mut S) {
-    let [width, height] = ui.io().display_size;
-
-    let eye = scene.camera.eye();
-    let view = scene.camera.view();
-
-    let aspect = width / height;
-    let fov = 45.0_f32.to_radians();
-    let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
-
-    let view_proj = projection.to_homogeneous() * view.to_homogeneous();
-    let mvp = view_proj * scene.cube.model.to_homogeneous();
-
-    scene.cube.render(view_proj, &scene.program, target);
-
-    for lbl in &scene.labels {
-        lbl.render(mvp, ui);
-    }
-
-    let mouse_view_point =
-        view.inverse() * linalg::world_coords(projection, ui.io().display_size, ui.io().mouse_pos);
-    let direction = Unit::new_normalize(eye - mouse_view_point);
-
-    let isects = scene.cube.intersections(eye, *direction);
-    if let Some((_, face)) = isects.first() {
-        scene
-            .cube
-            .render_face(face, view_proj, &scene.program, target);
-        ui.tooltip(|| {
-            let mut s = String::new();
-            for (nm, d) in &face.dims {
-                s.push_str(&format!("{} = {}\n", nm, if *d { 1 } else { 0 }));
-            }
-            ui.text(s);
-        });
-    };
+    context: String,
+    textures: Vec<TextureId>,
 }
 
 // [TODO: Hazel; 2022-06-29] This probably shouldn't exist? Or at least it needs to be refactored.
@@ -116,6 +55,112 @@ fn register_cube<'a, F: Facade>(
     (textures.insert(texture), fb)
 }
 
+fn render_cube_static<S: Surface>(size: [f32; 2], scene: &Scene, target: &mut S) {
+    let [width, height] = size;
+
+    // [HACK: Amber; 2022-06-30] i'm not sure if we should be using the scene's camera,
+    // or a different camera
+    let view = scene.camera.view();
+
+    let aspect = width / height;
+    let fov = 45.0_f32.to_radians();
+    let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
+
+    let view_proj = projection.to_homogeneous() * view.to_homogeneous();
+
+    scene.cube.render(view_proj, &scene.program, target);
+}
+
+fn init_scene(display: &Display, msg: &messages::DisplayGoal, renderer: &mut Renderer) -> Scene {
+    let camera = camera::Camera::new();
+
+    let program = program!(display, 140 => {
+        vertex: include_str!("../resources/shader.vert"),
+        fragment: include_str!("../resources/shader.frag")
+    })
+    .unwrap();
+
+    let labels = msg
+        .labels
+        .iter()
+        .map(|lbl| label::Label::new(&msg.dims, lbl))
+        .collect();
+    let cube = cube::Cube::new(display, &msg.dims, 1.0);
+
+    // [TODO: Amber; 2022-06-30] make this actually read stuff from the context (hard!)
+    // [TODO: Amber; 2022-06-30] make this adjust based on sidebar length (double hard!)
+    let texture = glium::texture::Texture2d::empty_with_format(
+        display,
+        glium::texture::UncompressedFloatFormat::F32F32F32F32,
+        glium::texture::MipmapsOption::NoMipmap,
+        200,
+        200
+    ).unwrap();
+    let depth_texture = glium::texture::DepthTexture2d::empty_with_format(
+        display,
+        glium::texture::DepthFormat::F32,
+        glium::texture::MipmapsOption::NoMipmap,
+        200,
+        200
+    ).unwrap();
+    let tex_rc = Rc::new(texture);
+
+    let (tex_id, mut fb) = register_cube(&tex_rc, &depth_texture, display, renderer.textures());
+    
+    let scene =
+        Scene {
+            camera,
+            program,
+            cube,
+            labels,
+            dims: msg.dims.clone(),
+            context: msg.context.clone(),
+            textures: vec![tex_id],
+        };
+
+    render_cube_static([200.0, 200.0], &scene, &mut fb);
+    
+    scene
+}
+
+fn render_cube<S: Surface>(ui: &Ui, display: &Display, scene: &mut Scene, target: &mut S) {
+    render_cube_static(ui.io().display_size, scene, target);
+
+    let [width, height] = ui.io().display_size;
+
+    let eye = scene.camera.eye();
+    let view = scene.camera.view();
+
+    let aspect = width / height;
+    let fov = 45.0_f32.to_radians();
+    let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
+
+    let view_proj = projection.to_homogeneous() * view.to_homogeneous();
+    let mvp = view_proj * scene.cube.model.to_homogeneous(); 
+
+    for lbl in &scene.labels {
+        lbl.render(mvp, ui);
+    }
+
+    let mouse_view_point =
+        view.inverse() * linalg::world_coords(projection, ui.io().display_size, ui.io().mouse_pos);
+    let direction = Unit::new_normalize(eye - mouse_view_point);
+
+    let isects = scene.cube.intersections(eye, *direction);
+    if let Some((_, face)) = isects.first() {
+        scene
+            .cube
+            .render_face(face, view_proj, &scene.program, target);
+        ui.tooltip(|| {
+            let mut s = String::new();
+            for (nm, d) in &face.dims {
+                s.push_str(&format!("{} = {}\n", nm, if *d { 1 } else { 0 }));
+            }
+            ui.text(s);
+        });
+    };
+}
+
 fn render_frame(ui: &Ui, display: &Display, scene: &mut Scene, target: &mut Frame) {
     let [_, height] = ui.io().display_size;
 
@@ -129,7 +174,13 @@ fn render_frame(ui: &Ui, display: &Display, scene: &mut Scene, target: &mut Fram
         .title_bar(false)
         .collapsible(false)
         .build(ui, || {
+            let draw_list = ui.get_window_draw_list();
+
             ui.text_wrapped(ctx);
+
+            ui.invisible_button("spoingus", [200.0, 200.0]);
+            
+            draw_list.add_image(scene.textures[0], ui.item_rect_min(), ui.item_rect_max()).build();
         });
 }
 
@@ -145,9 +196,9 @@ fn handle_input(ui: &Ui, scene: &mut Scene) {
     }
 }
 
-fn handle_message(msg: messages::Message, display: &Display, scene: &mut Scene) {
+fn handle_message(msg: messages::Message, display: &Display, scene: &mut Scene, renderer: &mut Renderer) {
     match msg {
-        messages::Message::DisplayGoal(goal) => *scene = init_scene(display, &goal),
+        messages::Message::DisplayGoal(goal) => *scene = init_scene(display, &goal, renderer),
     }
 }
 
@@ -157,7 +208,7 @@ pub fn render() {
         "i".to_string(),
         "j".to_string(),
         "k".to_string(),
-        "l".to_string(),
+//        "l".to_string(),
     ];
 
     let ctx = "Welcome to coolttviz!\nPlease add a #viz hole to your code to start visualizing your goals.\0";
@@ -168,6 +219,7 @@ pub fn render() {
             labels: vec![],
             context: ctx.to_string(),
         },
+        &mut system.renderer
     );
 
     system.main_loop(

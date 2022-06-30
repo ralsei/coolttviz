@@ -94,7 +94,7 @@ pub fn init(port: u32, title: &str) -> System {
 impl System {
     pub fn main_loop<
         Scene: 'static,
-        Handle: FnMut(Message, &Display, &mut Scene) + 'static,
+        Handle: FnMut(Message, &Display, &mut Scene, &mut Renderer) + 'static,
         Draw: FnMut(&mut bool, &Display, &mut Scene, &mut Frame, &mut Ui) + 'static,
     >(
         self,
@@ -117,7 +117,7 @@ impl System {
             let gl_window = display.gl_window();
 
             if let Some(msg) = server.poll() {
-                handle_msg(msg, &display, &mut scene)
+                handle_msg(msg, &display, &mut scene, &mut renderer)
             }
 
             match event {
