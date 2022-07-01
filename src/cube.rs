@@ -78,7 +78,7 @@ pub struct Cube {
 }
 
 impl Cube {
-    pub fn new(display: &Display, dim_names: &[String], size: f32) -> Cube {
+    pub fn new(display: &Display, dim_names: &[String], size: f32, color: [f32; 4]) -> Cube {
         let dim = dim_names.len() as u32;
 
         // FIXME: Preallocate with the correct capacity.
@@ -155,19 +155,19 @@ impl Cube {
                 }
             }
         }
-        let black = [0.0, 0.0, 0.0, 1.0];
+        // let black = [0.0, 0.0, 0.0, 1.0];
         let cube_geometry: Vec<Vertex> = faces
             .iter()
             .flat_map(|face| {
                 vec![
-                    Vertex::new(face.points[0], black),
-                    Vertex::new(face.points[1], black),
-                    Vertex::new(face.points[2], black),
-                    Vertex::new(face.points[3], black),
-                    Vertex::new(face.points[0], black),
-                    Vertex::new(face.points[2], black),
-                    Vertex::new(face.points[1], black),
-                    Vertex::new(face.points[3], black),
+                    Vertex::new(face.points[0], color),
+                    Vertex::new(face.points[1], color),
+                    Vertex::new(face.points[2], color),
+                    Vertex::new(face.points[3], color),
+                    Vertex::new(face.points[0], color),
+                    Vertex::new(face.points[2], color),
+                    Vertex::new(face.points[1], color),
+                    Vertex::new(face.points[3], color),
                 ]
             })
             .collect();

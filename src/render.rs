@@ -15,23 +15,33 @@ use crate::label;
 use crate::messages;
 use crate::{linalg, system};
 
+// [TODO: Amber; 2022-07-01] this should be more than just a string,
+// and should be part of the thing the server sends
+type Context = String;
+
+pub struct LabeledCube {
+    cube: cube::Cube,
+    dims: Vec<String>,
+    labels: Vec<label::Label>,
+    texture_id: Option<TextureId>,
+}
+
 pub struct Scene {
     camera: camera::Camera,
 
-    cube: cube::Cube,
+    main_cube: LabeledCube,
 
     program: glium::Program,
 
-    dims: Vec<String>,
-    labels: Vec<label::Label>,
-
-    context: String,
-    textures: Vec<TextureId>,
+    context: Context,
+    sidebar_cubes: Vec<LabeledCube>,
 }
 
-// [TODO: Hazel; 2022-06-29] This probably shouldn't exist? Or at least it needs to be refactored.
-// Getting the borrow checker to accept this was a pain in the shit, which is why I'm leaving it
-// as dead code for now.
+pub enum CubeIndex {
+    MainCube,
+    SidebarCube(usize)
+}
+
 fn register_cube<'a, F: Facade>(
     tex_rc_ref: &'a Rc<Texture2d>,
     depthtex: &'a DepthTexture2d,
@@ -55,11 +65,17 @@ fn register_cube<'a, F: Facade>(
     (textures.insert(texture), fb)
 }
 
-fn render_cube_static<S: Surface>(size: [f32; 2], scene: &Scene, target: &mut S) {
+fn render_cube_labelless<S: Surface>(size: [f32; 2], scene: &mut Scene, idx: CubeIndex, target: &mut S) {
     let [width, height] = size;
+    let lc = match idx {
+        CubeIndex::MainCube => &scene.main_cube,
+        CubeIndex::SidebarCube(n) => &scene.sidebar_cubes[n],
+    };
 
     // [HACK: Amber; 2022-06-30] i'm not sure if we should be using the scene's camera,
     // or a different camera
+
+    // ... we should be using a diferent camera
     let view = scene.camera.view();
 
     let aspect = width / height;
@@ -68,7 +84,48 @@ fn render_cube_static<S: Surface>(size: [f32; 2], scene: &Scene, target: &mut S)
 
     let view_proj = projection.to_homogeneous() * view.to_homogeneous();
 
-    scene.cube.render(view_proj, &scene.program, target);
+    lc.cube.render(view_proj, &scene.program, target);
+}
+
+// [TODO: Amber; 2022-07-01] this is a stub, make this read from the context for real
+fn cubes_from_context(display: &Display, scene: &mut Scene, renderer: &mut Renderer) {
+    // [HACK: Amber; 2022-07-01] adjust this with the sidebar size
+    let size = [200.0, 200.0];
+
+    let labels = vec![];
+    let dims = vec!["i".to_string(), "j".to_string()];
+
+    let white = [1.0, 1.0, 1.0, 1.0];
+    let cube = cube::Cube::new(display, &dims, 1.0, white);
+
+    let texture = glium::texture::Texture2d::empty_with_format(
+        display,
+        glium::texture::UncompressedFloatFormat::F32F32F32F32,
+        glium::texture::MipmapsOption::NoMipmap,
+        size[0] as u32,
+        size[1] as u32
+    ).unwrap();
+    let depth_texture = glium::texture::DepthTexture2d::empty_with_format(
+        display,
+        glium::texture::DepthFormat::F32,
+        glium::texture::MipmapsOption::NoMipmap,
+        size[0] as u32,
+        size[1] as u32
+    ).unwrap();
+    let tex_rc = Rc::new(texture);
+
+    let (texture_id, mut fb) = register_cube(&tex_rc, &depth_texture, display, renderer.textures());
+
+    let mut labeled_cube = LabeledCube {
+        cube,
+        dims,
+        labels,
+        texture_id: Some(texture_id),
+    };
+
+    scene.sidebar_cubes.push(labeled_cube);
+    
+    render_cube_labelless(size, scene, CubeIndex::SidebarCube(0), &mut fb);
 }
 
 fn init_scene(display: &Display, msg: &messages::DisplayGoal, renderer: &mut Renderer) -> Scene {
@@ -85,46 +142,31 @@ fn init_scene(display: &Display, msg: &messages::DisplayGoal, renderer: &mut Ren
         .iter()
         .map(|lbl| label::Label::new(&msg.dims, lbl))
         .collect();
-    let cube = cube::Cube::new(display, &msg.dims, 1.0);
+    let black = [0.0, 0.0, 0.0, 1.0];
+    let cube = cube::Cube::new(display, &msg.dims, 1.0, black);
 
-    // [TODO: Amber; 2022-06-30] make this actually read stuff from the context (hard!)
-    // [TODO: Amber; 2022-06-30] make this adjust based on sidebar length (double hard!)
-    let texture = glium::texture::Texture2d::empty_with_format(
-        display,
-        glium::texture::UncompressedFloatFormat::F32F32F32F32,
-        glium::texture::MipmapsOption::NoMipmap,
-        200,
-        200
-    ).unwrap();
-    let depth_texture = glium::texture::DepthTexture2d::empty_with_format(
-        display,
-        glium::texture::DepthFormat::F32,
-        glium::texture::MipmapsOption::NoMipmap,
-        200,
-        200
-    ).unwrap();
-    let tex_rc = Rc::new(texture);
-
-    let (tex_id, mut fb) = register_cube(&tex_rc, &depth_texture, display, renderer.textures());
-    
-    let scene =
+    let mut sidebar_cubes = Vec::new();
+    let mut scene =
         Scene {
             camera,
             program,
-            cube,
-            labels,
-            dims: msg.dims.clone(),
+            main_cube: LabeledCube {
+                cube,
+                labels,
+                dims: msg.dims.clone(),
+                texture_id: None,
+            },
             context: msg.context.clone(),
-            textures: vec![tex_id],
+            sidebar_cubes,
         };
 
-    render_cube_static([200.0, 200.0], &scene, &mut fb);
+    cubes_from_context(display, &mut scene, renderer);
     
     scene
 }
 
 fn render_cube<S: Surface>(ui: &Ui, display: &Display, scene: &mut Scene, target: &mut S) {
-    render_cube_static(ui.io().display_size, scene, target);
+    render_cube_labelless(ui.io().display_size, scene, CubeIndex::MainCube, target);
 
     let [width, height] = ui.io().display_size;
 
@@ -136,9 +178,9 @@ fn render_cube<S: Surface>(ui: &Ui, display: &Display, scene: &mut Scene, target
     let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
 
     let view_proj = projection.to_homogeneous() * view.to_homogeneous();
-    let mvp = view_proj * scene.cube.model.to_homogeneous(); 
+    let mvp = view_proj * scene.main_cube.cube.model.to_homogeneous(); 
 
-    for lbl in &scene.labels {
+    for lbl in &scene.main_cube.labels {
         lbl.render(mvp, ui);
     }
 
@@ -146,11 +188,9 @@ fn render_cube<S: Surface>(ui: &Ui, display: &Display, scene: &mut Scene, target
         view.inverse() * linalg::world_coords(projection, ui.io().display_size, ui.io().mouse_pos);
     let direction = Unit::new_normalize(eye - mouse_view_point);
 
-    let isects = scene.cube.intersections(eye, *direction);
+    let isects = scene.main_cube.cube.intersections(eye, *direction);
     if let Some((_, face)) = isects.first() {
-        scene
-            .cube
-            .render_face(face, view_proj, &scene.program, target);
+        scene.main_cube.cube.render_face(face, view_proj, &scene.program, target);
         ui.tooltip(|| {
             let mut s = String::new();
             for (nm, d) in &face.dims {
@@ -178,9 +218,13 @@ fn render_frame(ui: &Ui, display: &Display, scene: &mut Scene, target: &mut Fram
 
             ui.text_wrapped(ctx);
 
-            ui.invisible_button("spoingus", [200.0, 200.0]);
-            
-            draw_list.add_image(scene.textures[0], ui.item_rect_min(), ui.item_rect_max()).build();
+            for sc in &scene.sidebar_cubes {
+                ui.invisible_button("spoingus", [200.0, 200.0]);
+
+                draw_list
+                    .add_image(sc.texture_id.unwrap(), ui.item_rect_min(), ui.item_rect_max())
+                    .build();               
+            }
         });
 }
 
@@ -208,7 +252,7 @@ pub fn render() {
         "i".to_string(),
         "j".to_string(),
         "k".to_string(),
-//        "l".to_string(),
+        "l".to_string(),
     ];
 
     let ctx = "Welcome to coolttviz!\nPlease add a #viz hole to your code to start visualizing your goals.\0";
