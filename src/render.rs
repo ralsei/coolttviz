@@ -4,7 +4,7 @@ use glium::texture::DepthTexture2d;
 use glium::uniforms::SamplerBehavior;
 use glium::*;
 use imgui::*;
-use imgui_glium_renderer::{Texture, Renderer};
+use imgui_glium_renderer::{Renderer, Texture};
 use nalgebra::{Perspective3, Unit};
 use std::rc::Rc;
 
@@ -14,8 +14,6 @@ use crate::label;
 use crate::messages;
 use crate::messages::CubeMessage;
 use crate::{linalg, system};
-
-type Context = String;
 
 pub struct LabeledCube {
     name: String,
@@ -32,13 +30,13 @@ pub struct Scene {
 
     program: glium::Program,
 
-    context: Context,
+    context: String,
     sidebar_cubes: Vec<LabeledCube>,
 }
 
 pub enum CubeIndex {
     MainCube,
-    SidebarCube(usize)
+    SidebarCube(usize),
 }
 
 fn register_cube<'a, F: Facade>(
@@ -48,11 +46,10 @@ fn register_cube<'a, F: Facade>(
     textures: &'a mut Textures<Texture>,
 ) -> (TextureId, SimpleFrameBuffer<'a>) {
     let tex_rc = tex_rc_ref.clone();
-    let another_tex_rc = tex_rc.clone();
     let fb = SimpleFrameBuffer::with_depth_buffer(facade, &**tex_rc_ref, depthtex).unwrap();
 
     let texture = Texture {
-        texture: another_tex_rc,
+        texture: tex_rc,
 
         sampler: SamplerBehavior {
             magnify_filter: uniforms::MagnifySamplerFilter::Linear,
@@ -64,7 +61,12 @@ fn register_cube<'a, F: Facade>(
     (textures.insert(texture), fb)
 }
 
-fn render_cube_labelless<S: Surface>(size: [f32; 2], scene: &mut Scene, idx: CubeIndex, target: &mut S) {
+fn render_cube_labelless<S: Surface>(
+    size: [f32; 2],
+    scene: &mut Scene,
+    idx: CubeIndex,
+    target: &mut S,
+) {
     let [width, height] = size;
     let lc = match idx {
         CubeIndex::MainCube => &scene.main_cube,
@@ -87,7 +89,12 @@ fn render_cube_labelless<S: Surface>(size: [f32; 2], scene: &mut Scene, idx: Cub
 }
 
 // [TODO: Amber; 2022-07-01] this is a stub, make this read from the context for real
-fn cubes_from_context(display: &Display, scene: &mut Scene, cubes: &Vec<CubeMessage>, renderer: &mut Renderer) {
+fn cubes_from_context(
+    display: &Display,
+    scene: &mut Scene,
+    cubes: &[CubeMessage],
+    renderer: &mut Renderer,
+) {
     // [HACK: Amber; 2022-07-01] adjust this with the sidebar size
     let size = [200.0, 200.0];
     let white = [1.0, 1.0, 1.0, 1.0];
@@ -100,7 +107,6 @@ fn cubes_from_context(display: &Display, scene: &mut Scene, cubes: &Vec<CubeMess
             .map(|lbl| label::Label::new(&dims, lbl))
             .collect();
 
-
         let cube = cube::Cube::new(display, &dims, 1.0, white);
 
         let texture = glium::texture::Texture2d::empty_with_format(
@@ -108,18 +114,21 @@ fn cubes_from_context(display: &Display, scene: &mut Scene, cubes: &Vec<CubeMess
             glium::texture::UncompressedFloatFormat::F32F32F32F32,
             glium::texture::MipmapsOption::NoMipmap,
             size[0] as u32,
-            size[1] as u32
-        ).unwrap();
+            size[1] as u32,
+        )
+        .unwrap();
         let depth_texture = glium::texture::DepthTexture2d::empty_with_format(
             display,
             glium::texture::DepthFormat::F32,
             glium::texture::MipmapsOption::NoMipmap,
             size[0] as u32,
-            size[1] as u32
-        ).unwrap();
+            size[1] as u32,
+        )
+        .unwrap();
         let tex_rc = Rc::new(texture);
 
-        let (texture_id, mut fb) = register_cube(&tex_rc, &depth_texture, display, renderer.textures());
+        let (texture_id, mut fb) =
+            register_cube(&tex_rc, &depth_texture, display, renderer.textures());
 
         let labeled_cube = LabeledCube {
             name: cm.id.clone(),
@@ -151,23 +160,22 @@ fn init_scene(display: &Display, msg: &messages::DisplayGoal, renderer: &mut Ren
     let black = [0.0, 0.0, 0.0, 1.0];
     let cube = cube::Cube::new(display, &msg.dims, 1.0, black);
 
-    let mut scene =
-        Scene {
-            camera,
-            program,
-            main_cube: LabeledCube {
-                name: "".to_string(),
-                cube,
-                labels,
-                dims: msg.dims.clone(),
-                texture_id: None,
-            },
-            context: msg.context.clone(),
-            sidebar_cubes: Vec::new(),
-        };
+    let mut scene = Scene {
+        camera,
+        program,
+        main_cube: LabeledCube {
+            name: "".to_string(),
+            cube,
+            labels,
+            dims: msg.dims.clone(),
+            texture_id: None,
+        },
+        context: msg.context.clone(),
+        sidebar_cubes: Vec::new(),
+    };
 
     cubes_from_context(display, &mut scene, &msg.cubes, renderer);
-    
+
     scene
 }
 
@@ -184,7 +192,7 @@ fn render_cube<S: Surface>(ui: &Ui, scene: &mut Scene, target: &mut S) {
     let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
 
     let view_proj = projection.to_homogeneous() * view.to_homogeneous();
-    let mvp = view_proj * scene.main_cube.cube.model.to_homogeneous(); 
+    let mvp = view_proj * scene.main_cube.cube.model.to_homogeneous();
 
     for lbl in &scene.main_cube.labels {
         lbl.render(mvp, ui);
@@ -196,7 +204,10 @@ fn render_cube<S: Surface>(ui: &Ui, scene: &mut Scene, target: &mut S) {
 
     let isects = scene.main_cube.cube.intersections(eye, *direction);
     if let Some((_, face)) = isects.first() {
-        scene.main_cube.cube.render_face(face, view_proj, &scene.program, target);
+        scene
+            .main_cube
+            .cube
+            .render_face(face, view_proj, &scene.program, target);
         ui.tooltip(|| {
             let mut s = String::new();
             for (nm, d) in &face.dims {
@@ -229,10 +240,17 @@ fn render_frame(ui: &Ui, scene: &mut Scene, target: &mut Frame) {
                     let name = sc.name.clone();
                     ui.text_wrapped(format!("Cube: {name}"));
 
-                    ui.invisible_button("", [200.0, 200.0]);
+                    ui.invisible_button(
+                        "",
+                        [ui.content_region_avail()[0], ui.content_region_avail()[0]],
+                    );
 
                     draw_list
-                        .add_image(sc.texture_id.unwrap(), ui.item_rect_min(), ui.item_rect_max())
+                        .add_image(
+                            sc.texture_id.unwrap(),
+                            ui.item_rect_min(),
+                            ui.item_rect_max(),
+                        )
                         .build();
                 }
             }
@@ -251,7 +269,12 @@ fn handle_input(ui: &Ui, scene: &mut Scene) {
     }
 }
 
-fn handle_message(msg: messages::Message, display: &Display, scene: &mut Scene, renderer: &mut Renderer) {
+fn handle_message(
+    msg: messages::Message,
+    display: &Display,
+    scene: &mut Scene,
+    renderer: &mut Renderer,
+) {
     match msg {
         messages::Message::DisplayGoal(goal) => *scene = init_scene(display, &goal, renderer),
     }
@@ -275,15 +298,11 @@ pub fn render() {
             context: ctx.to_string(),
             cubes: vec![],
         },
-        &mut system.renderer
+        &mut system.renderer,
     );
 
-    system.main_loop(
-        scene,
-        handle_message,
-        move |_, _, scene, target, ui| {
-            handle_input(ui, scene);
-            render_frame(ui, scene, target);
-        },
-    );
+    system.main_loop(scene, handle_message, move |_, _, scene, target, ui| {
+        handle_input(ui, scene);
+        render_frame(ui, scene, target);
+    });
 }
