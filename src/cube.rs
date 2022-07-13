@@ -263,19 +263,4 @@ impl Cube {
             )
             .unwrap();
     }
-
-    pub fn render_all<S: Surface>(
-        &mut self,
-        view_proj: Matrix4<f32>,
-        shader: &Program,
-        target: &mut S,
-    ) {
-        self.render(view_proj, shader, target);
-
-        // [NOTE: Hazel; 2022-06-29] We clone here to avoid borrowing self twice mutably
-        // This should be negligible perf-wise? If not we can revisit it
-        for face in &mut self.faces.clone() {
-            // self.render_face(&face, view_proj, shader, target);
-        }
-    }
 }

@@ -6,6 +6,7 @@ use std::thread::{self, JoinHandle};
 use crate::messages::Message;
 
 // FIXME: We should make sure that we shut things down properly
+#[allow(dead_code)]
 pub struct Server {
     server_thread: JoinHandle<()>,
     rx: mpsc::Receiver<Message>,

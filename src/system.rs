@@ -7,19 +7,10 @@ use imgui::{Context, FontConfig, FontGlyphRanges, FontSource, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::path::Path;
-use std::rc::Rc;
 use std::time::Instant;
 
 use crate::messages::Message;
 use crate::server::Server;
-
-use crate::camera;
-use crate::cube;
-use crate::label;
-use crate::linalg;
-use crate::messages;
-
-use crate::render::Scene;
 
 pub struct System {
     pub event_loop: EventLoop<()>,

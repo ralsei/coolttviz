@@ -9,10 +9,18 @@ pub struct Label {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct CubeMessage {
+    pub id: String,
+    pub dims: Vec<String>,
+    pub labels: Vec<Label>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct DisplayGoal {
     pub dims: Vec<String>,
     pub labels: Vec<Label>,
     pub context: String,
+    pub cubes: Vec<CubeMessage>,
 }
 
 #[derive(Debug, Deserialize)]
