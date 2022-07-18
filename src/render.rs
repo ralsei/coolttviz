@@ -77,6 +77,13 @@ fn render_cube_labelless<S: Surface>(
     // or a different camera
 
     // ... we should be using a diferent camera
+    // [HACK: June; 2022-07-14] So what this is doing is using the camera at the front-facing view
+    // This is probably not optimal. In my mind for 1 and 2-cubes, we should be rendering at the front,
+    // But for 3 and 4-cubes, we should be rendering at an angle
+
+    // We /could/ construct a camera here, but that wouldn't be great, since for the main cube we actually
+    // do want to use the scene's dynamic camera
+    // Alternatively we could just write a view matrix when the index is SidebarCube which would be fine
     let view = scene.camera.view();
 
     let aspect = width / height;
@@ -88,14 +95,12 @@ fn render_cube_labelless<S: Surface>(
     lc.cube.render(view_proj, &scene.program, target);
 }
 
-// [TODO: Amber; 2022-07-01] this is a stub, make this read from the context for real
 fn cubes_from_context(
     display: &Display,
     scene: &mut Scene,
     cubes: &[CubeMessage],
     renderer: &mut Renderer,
 ) {
-    // [HACK: Amber; 2022-07-01] adjust this with the sidebar size
     let size = [200.0, 200.0];
     let white = [1.0, 1.0, 1.0, 1.0];
 
@@ -237,8 +242,7 @@ fn render_frame(ui: &Ui, scene: &mut Scene, target: &mut Frame) {
 
             for sc in &scene.sidebar_cubes {
                 if !sc.dims.is_empty() {
-                    let name = sc.name.clone();
-                    ui.text_wrapped(format!("Cube: {name}"));
+                    ui.text_wrapped(format!("Cube: {}", sc.name));
 
                     ui.invisible_button(
                         "",

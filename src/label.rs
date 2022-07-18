@@ -43,7 +43,7 @@ impl Label {
             .size([100.0, 100.0], Condition::Appearing)
             .collapsed(true, Condition::Appearing)
             .build(ui, || {
-                ui.text(&self.txt);
+                ui.text_wrapped(&self.txt);
             });
     }
 }
