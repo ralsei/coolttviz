@@ -42,6 +42,7 @@ pub fn init(port: u32, title: &str) -> System {
     {
         let gl_window = display.gl_window();
         let window = gl_window.window();
+        window.set_title("Six Eyes");
         platform.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
     }
 

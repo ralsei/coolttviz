@@ -293,7 +293,7 @@ pub fn render() {
         "l".to_string(),
     ];
 
-    let ctx = "Welcome to coolttviz!\nPlease add a #viz hole to your code to start visualizing your goals.\0";
+    let ctx = "Please add a #viz or #edit hole to your code to start visualizing your goals.\0";
     let scene = init_scene(
         &system.display,
         &messages::DisplayGoal {

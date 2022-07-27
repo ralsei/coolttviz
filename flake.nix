@@ -1,6 +1,6 @@
 {
   inputs = {
-  fenix = {
+    fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
@@ -15,10 +15,10 @@
         defaultPackage = (pkgs.makeRustPlatform {
           inherit (fenix.packages.${system}.minimal) cargo rustc;
         }).buildRustPackage rec {
-          pname = "coolttviz";
+          pname = "six-eyes";
           version = "0.1.0";
           src = ./.;
-          cargoSha256 = "5z+I5JTkCIqXwV3S7V1y3+b5xUaYY4SICi1xMA6lf/M=";
+          cargoSha256 = "qlrzkPUnNmNTR7sGdojMldJboC2JNuuthgw3zlNYmZM=";
           buildInputs = with pkgs; [ 
             xorg.libX11 
             xorg.libX11.dev 

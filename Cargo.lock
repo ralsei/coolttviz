@@ -165,20 +165,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coolttviz-rs"
-version = "0.1.0"
-dependencies = [
- "glium",
- "imgui",
- "imgui-glium-renderer",
- "imgui-winit-support",
- "nalgebra",
- "ordered-float",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1228,6 +1214,20 @@ dependencies = [
  "num-traits",
  "paste",
  "wide",
+]
+
+[[package]]
+name = "six-eyes"
+version = "0.1.0"
+dependencies = [
+ "glium",
+ "imgui",
+ "imgui-glium-renderer",
+ "imgui-winit-support",
+ "nalgebra",
+ "ordered-float",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
