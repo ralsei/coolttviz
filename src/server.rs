@@ -1,13 +1,15 @@
 use std::io::Read;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread::{self, JoinHandle};
 
 use crate::messages::Message;
+use crate::syntax::Node;
 
 // FIXME: We should make sure that we shut things down properly
 #[allow(dead_code)]
 pub struct Server {
+    port: u32,
     server_thread: JoinHandle<()>,
     rx: mpsc::Receiver<Message>,
 }
@@ -35,7 +37,12 @@ impl Server {
             }
         });
 
-        Server { server_thread, rx }
+        Server { port, server_thread, rx }
+    }
+
+    pub fn send(&self, cs: Node) {
+        let stream = TcpStream::connect(format!("127.0.0.1:{}", self.port)).expect("oh no 1");
+        serde_json::to_writer(stream, &cs).expect("oh no 2");
     }
 
     pub fn poll(&self) -> Option<Message> {
