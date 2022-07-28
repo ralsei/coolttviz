@@ -1,4 +1,6 @@
-use serde::{*, ser::SerializeSeq};
+use serde::{ser::SerializeSeq, *};
+use slotmap::*;
+use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub enum Ident {
@@ -7,16 +9,15 @@ pub enum Ident {
     Machine(String),
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct Cell {
-    pub names: Vec<Ident>,
-    pub ty: Box<ConcreteSyntax>,
+new_key_type! {
+    pub struct SyntaxRef;
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct Node {
-    node: Box<ConcreteSyntax>,
-}
+// #[derive(Clone, Debug, Serialize)]
+// pub struct Cell {
+//     pub names: Vec<Ident>,
+//     pub ty: Node,
+// }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Hole {
@@ -25,39 +26,40 @@ pub struct Hole {
 }
 
 #[derive(Clone, Debug)]
-pub enum ConcreteSyntax {
+pub enum ConcreteSyntaxData {
     Var(Ident),
     Lit(u32),
-    Pi(Vec<Cell>, Node),
-    Lam(Vec<Ident>, Node),
-    Ap(Node, Vec<Node>),
-    Sg(Vec<Cell>, Node),
+    // Pi(Vec<Cell>, SyntaxRef),
+    Lam(Vec<Ident>, SyntaxRef),
+    Ap(SyntaxRef, Vec<SyntaxRef>),
+    // Sg(Vec<Cell>, SyntaxRef),
     Type,
     Hole(Hole),
-    BoundaryHole(Option<Node>),
     Underscore,
     Dim,
     Cof,
-    CofEq(Node, Node),
-    CofLe(Node, Node),
-    Join(Vec<Node>),
-    Meet(Vec<Node>),
-    CofBoundary(Node),
-    CofSplit(Vec<(Node, Node)>),
+    CofEq(SyntaxRef, SyntaxRef),
+    CofLe(SyntaxRef, SyntaxRef),
+    Join(Vec<SyntaxRef>),
+    Meet(Vec<SyntaxRef>),
+    CofBoundary(SyntaxRef),
+    CofSplit(Vec<(SyntaxRef, SyntaxRef)>),
     TopC,
     BotC,
-    HComChk(Node, Node, Node),
-    HFillChk(Node, Node),
+    HComChk(SyntaxRef, SyntaxRef, SyntaxRef),
+    HFillChk(SyntaxRef, SyntaxRef),
 }
 
-impl Node {
-    pub fn new(cs: ConcreteSyntax) -> Node {
-        Node { node: Box::new(cs) }
-    }
+#[derive(Debug, Serialize)]
+pub struct Node {
+    pub node: ConcreteSyntax,
 }
 
+#[derive(Debug)]
+pub struct ConcreteSyntax(pub Rc<SlotMap<SyntaxRef, ConcreteSyntaxData>>, pub SyntaxRef);
+
+use crate::syntax::ConcreteSyntaxData::*;
 use crate::Ident::*;
-use crate::ConcreteSyntax::*;
 
 // [HACK: Avery; 2022-07-25] Yojson and Serde have different representations,
 // so we're stuck with this hellhole
@@ -70,17 +72,25 @@ impl Serialize for Ident {
     {
         let mut seq = serializer.serialize_seq(None)?;
         match self {
-            Anon => seq.serialize_element("Anon")?, 
+            Anon => seq.serialize_element("Anon")?,
             User(vs) => {
                 seq.serialize_element("User")?;
                 seq.serialize_element(vs)?;
-            },
+            }
             Machine(st) => {
                 seq.serialize_element("Machine")?;
                 seq.serialize_element(st)?;
-            },
+            }
         }
         seq.end()
+    }
+}
+
+impl Node {
+    fn new(map: &Rc<SlotMap<SyntaxRef, ConcreteSyntaxData>>, next: &SyntaxRef) -> Node {
+        Node {
+            node: ConcreteSyntax(map.clone(), *next)
+        }
     }
 }
 
@@ -89,87 +99,89 @@ impl Serialize for ConcreteSyntax {
     where
         S: Serializer,
     {
+        let ConcreteSyntax(map, current) = self;
         let mut seq = serializer.serialize_seq(None)?;
-        match self {
+        match &map[*current] {
             Var(id) => {
                 seq.serialize_element("Var")?;
                 seq.serialize_element(&id)?;
-            },
+            }
             Lit(n) => {
                 seq.serialize_element("Lit")?;
                 seq.serialize_element(&n)?;
-            },
-            Pi(vc, node) => {
-                seq.serialize_element("Pi")?;
-                seq.serialize_element(&vc)?;
-                seq.serialize_element(&node)?;
-            },
-            Lam(vi, node) => {
+            }
+            Lam(vi, sref) => {
                 seq.serialize_element("Lam")?;
                 seq.serialize_element(&vi)?;
-                seq.serialize_element(&node)?;
-            },
-            Ap(node, vn) => {
+                seq.serialize_element(&Node::new(map, sref))?;
+            }
+            Ap(sref, vsref) => {
                 seq.serialize_element("Ap")?;
-                seq.serialize_element(&node)?;
-                seq.serialize_element(&vn)?;
-            },
-            Sg(vc, node) => {
-                seq.serialize_element("Sg")?;
-                seq.serialize_element(&vc)?;
-                seq.serialize_element(&node)?;
-            },
+                seq.serialize_element(&Node::new(map, sref))?;
+                let vnode: Vec<Node> =
+                    vsref.iter().map(|n| Node::new(map, n)).collect();
+                seq.serialize_element(&vnode)?;
+            }
             Type => seq.serialize_element("Type")?,
             Hole(h) => {
                 seq.serialize_element("Hole")?;
                 seq.serialize_element(&h)?;
-            },
-            BoundaryHole(on) => {
-                seq.serialize_element("BoundaryHole")?;
-                seq.serialize_element(&on)?;
-            },
+            }
             Underscore => seq.serialize_element("Underscore")?,
             Dim => seq.serialize_element("Dim")?,
             Cof => seq.serialize_element("Cof")?,
-            CofEq(node1, node2) => {
+            CofEq(sref1, sref2) => {
                 seq.serialize_element("CofEq")?;
-                seq.serialize_element(&node1)?;
-                seq.serialize_element(&node2)?;
-            },
-            CofLe(node1, node2) => {
+                seq.serialize_element(&Node::new(map, sref1))?;
+                seq.serialize_element(&Node::new(map, sref2))?;
+            }
+            CofLe(sref1, sref2) => {
                 seq.serialize_element("CofLe")?;
-                seq.serialize_element(&node1)?;
-                seq.serialize_element(&node2)?;
-            },
-            Join(vn) => {
+                seq.serialize_element(&Node::new(map, sref1))?;
+                seq.serialize_element(&Node::new(map, sref2))?;
+            }
+            Join(vsref) => {
                 seq.serialize_element("Join")?;
-                seq.serialize_element(&vn)?;
-            },
-            Meet(vn) => {
+                let vnode: Vec<Node> =
+                    vsref.iter().map(|n| Node::new(map, n)).collect();
+                seq.serialize_element(&vnode)?;
+            }
+            Meet(vsref) => {
                 seq.serialize_element("Meet")?;
-                seq.serialize_element(&vn)?;
-            },
-            CofBoundary(node) => {
+                let vnode: Vec<Node> =
+                    vsref.iter().map(|n| Node::new(map, n)).collect();
+                seq.serialize_element(&vnode)?;
+            }
+            CofBoundary(sref) => {
                 seq.serialize_element("CofBoundary")?;
-                seq.serialize_element(&node)?;
-            },
-            CofSplit(vnn) => {
+                seq.serialize_element(&Node::new(map, sref))?;
+            }
+            CofSplit(vsrefp) => {
                 seq.serialize_element("CofSplit")?;
-                seq.serialize_element(&vnn)?;
-            },
+                let vnodep: Vec<(Node, Node)> = vsrefp
+                    .iter()
+                    .map(|(n1, n2)| {
+                        (
+                            Node::new(map, n1),
+                            Node::new(map, n2),
+                        )
+                    })
+                    .collect();
+                seq.serialize_element(&vnodep)?;
+            }
             TopC => seq.serialize_element("TopC")?,
             BotC => seq.serialize_element("BotC")?,
-            HComChk(node1, node2, node3) => {
+            HComChk(sref1, sref2, sref3) => {
                 seq.serialize_element("HComChk")?;
-                seq.serialize_element(&node1)?;
-                seq.serialize_element(&node2)?;
-                seq.serialize_element(&node3)?;
-            },
-            HFillChk(node1, node2) => {
+                seq.serialize_element(&Node::new(map, sref1))?;
+                seq.serialize_element(&Node::new(map, sref2))?;
+                seq.serialize_element(&Node::new(map, sref3))?;
+            }
+            HFillChk(sref1, sref2) => {
                 seq.serialize_element("HFillChk")?;
-                seq.serialize_element(&node1)?;
-                seq.serialize_element(&node2)?;
-            },
+                seq.serialize_element(&Node::new(map, sref1))?;
+                seq.serialize_element(&Node::new(map, sref2))?;
+            }
         }
         seq.end()
     }
