@@ -13,12 +13,6 @@ new_key_type! {
     pub struct SyntaxRef;
 }
 
-// #[derive(Clone, Debug, Serialize)]
-// pub struct Cell {
-//     pub names: Vec<Ident>,
-//     pub ty: Node,
-// }
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Hole {
     pub name: Option<String>,
@@ -26,40 +20,51 @@ pub struct Hole {
 }
 
 #[derive(Clone, Debug)]
-pub enum ConcreteSyntaxData {
+pub enum ConcreteSyntax<Rec> {
     Var(Ident),
     Lit(u32),
-    // Pi(Vec<Cell>, SyntaxRef),
-    Lam(Vec<Ident>, SyntaxRef),
-    Ap(SyntaxRef, Vec<SyntaxRef>),
-    // Sg(Vec<Cell>, SyntaxRef),
+    Lam(Vec<Ident>, Rec),
+    Ap(Rec, Vec<Rec>),
     Type,
     Hole(Hole),
     Underscore,
     Dim,
     Cof,
-    CofEq(SyntaxRef, SyntaxRef),
-    CofLe(SyntaxRef, SyntaxRef),
-    Join(Vec<SyntaxRef>),
-    Meet(Vec<SyntaxRef>),
-    CofBoundary(SyntaxRef),
-    CofSplit(Vec<(SyntaxRef, SyntaxRef)>),
+    CofEq(Rec, Rec),
+    CofLe(Rec, Rec),
+    Join(Vec<Rec>),
+    Meet(Vec<Rec>),
+    CofSplit(Vec<(Rec, Rec)>),
     TopC,
     BotC,
-    HComChk(SyntaxRef, SyntaxRef, SyntaxRef),
-    HFillChk(SyntaxRef, SyntaxRef),
+    HComChk(Rec, Rec, Rec),
+    HFillChk(Rec, Rec),
+}
+
+pub struct SyntaxRec {
+    pub value: Box<ConcreteSyntax<SyntaxRec>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Node {
-    pub node: ConcreteSyntax,
+    pub node: SerializableSyntax,
 }
 
 #[derive(Debug)]
-pub struct ConcreteSyntax(pub Rc<SlotMap<SyntaxRef, ConcreteSyntaxData>>, pub SyntaxRef);
+pub struct SerializableSyntax(
+    pub Rc<SlotMap<SyntaxRef, ConcreteSyntax<SyntaxRef>>>,
+    pub SyntaxRef,
+);
 
-use crate::syntax::ConcreteSyntaxData::*;
-use crate::Ident::*;
+use crate::syntax::{ConcreteSyntax::*, Ident::*};
+
+impl SyntaxRec {
+    pub fn new(cs: ConcreteSyntax<SyntaxRec>) -> SyntaxRec {
+        SyntaxRec {
+            value: Box::new(cs),
+        }
+    }
+}
 
 // [HACK: Avery; 2022-07-25] Yojson and Serde have different representations,
 // so we're stuck with this hellhole
@@ -87,19 +92,19 @@ impl Serialize for Ident {
 }
 
 impl Node {
-    fn new(map: &Rc<SlotMap<SyntaxRef, ConcreteSyntaxData>>, next: &SyntaxRef) -> Node {
+    fn new(map: &Rc<SlotMap<SyntaxRef, ConcreteSyntax<SyntaxRef>>>, next: &SyntaxRef) -> Node {
         Node {
-            node: ConcreteSyntax(map.clone(), *next)
+            node: SerializableSyntax(map.clone(), *next),
         }
     }
 }
 
-impl Serialize for ConcreteSyntax {
+impl Serialize for SerializableSyntax {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let ConcreteSyntax(map, current) = self;
+        let SerializableSyntax(map, current) = self;
         let mut seq = serializer.serialize_seq(None)?;
         match &map[*current] {
             Var(id) => {
@@ -118,8 +123,7 @@ impl Serialize for ConcreteSyntax {
             Ap(sref, vsref) => {
                 seq.serialize_element("Ap")?;
                 seq.serialize_element(&Node::new(map, sref))?;
-                let vnode: Vec<Node> =
-                    vsref.iter().map(|n| Node::new(map, n)).collect();
+                let vnode: Vec<Node> = vsref.iter().map(|n| Node::new(map, n)).collect();
                 seq.serialize_element(&vnode)?;
             }
             Type => seq.serialize_element("Type")?,
@@ -142,30 +146,19 @@ impl Serialize for ConcreteSyntax {
             }
             Join(vsref) => {
                 seq.serialize_element("Join")?;
-                let vnode: Vec<Node> =
-                    vsref.iter().map(|n| Node::new(map, n)).collect();
+                let vnode: Vec<Node> = vsref.iter().map(|n| Node::new(map, n)).collect();
                 seq.serialize_element(&vnode)?;
             }
             Meet(vsref) => {
                 seq.serialize_element("Meet")?;
-                let vnode: Vec<Node> =
-                    vsref.iter().map(|n| Node::new(map, n)).collect();
+                let vnode: Vec<Node> = vsref.iter().map(|n| Node::new(map, n)).collect();
                 seq.serialize_element(&vnode)?;
-            }
-            CofBoundary(sref) => {
-                seq.serialize_element("CofBoundary")?;
-                seq.serialize_element(&Node::new(map, sref))?;
             }
             CofSplit(vsrefp) => {
                 seq.serialize_element("CofSplit")?;
                 let vnodep: Vec<(Node, Node)> = vsrefp
                     .iter()
-                    .map(|(n1, n2)| {
-                        (
-                            Node::new(map, n1),
-                            Node::new(map, n2),
-                        )
-                    })
+                    .map(|(n1, n2)| (Node::new(map, n1), Node::new(map, n2)))
                     .collect();
                 seq.serialize_element(&vnodep)?;
             }
